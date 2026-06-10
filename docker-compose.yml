@@ -1,0 +1,24 @@
+# Paste-only deployment for QNAP Container Station (Applications → Create →
+# paste this YAML). No files to upload: the container clones the repo on boot.
+# To ship an update later: push to GitHub, then restart the container.
+#
+# Replace REPLACE_WITH_SECRET with the shared secret (same value as the
+# PRINT_BRIDGE_SECRET wrangler secret on the molcom-expenses worker).
+services:
+  print-bridge:
+    image: python:3.11-slim
+    container_name: print-bridge
+    restart: unless-stopped
+    ports:
+      - "8631:8080"
+    environment:
+      PRINT_SECRET: "REPLACE_WITH_SECRET"
+      CANON_URI: "ipp://10.69.7.107/ipp/print"
+      EPSON_URI: "ipp://10.69.7.235:631/ipp/print"
+    command: >
+      bash -c "apt-get update &&
+      apt-get install -y --no-install-recommends cups cups-ipp-utils git ca-certificates &&
+      pip install --no-cache-dir flask &&
+      rm -rf /app &&
+      git clone --depth 1 https://github.com/vandreus/print-bridge /app &&
+      bash /app/start.sh"
