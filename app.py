@@ -42,6 +42,12 @@ setup_state = {
     for pid in PRINTERS
 }
 
+# PPD name of each printer's manual/multipurpose feed, used when a job asks
+# for source="manual". Discovered via GET /printers/<id>/options:
+#   Canon MF450:   InputSlot: Auto ByPassTray *Tray1
+#   Epson XP-15000: InputSlot: Auto *Main Rear Disc
+MANUAL_SOURCE = {"canon": "ByPassTray", "epson": "Rear"}
+
 
 def run(cmd, timeout=60):
     return subprocess.run(
@@ -90,6 +96,20 @@ def setup_loop():
             if host and tcp_reachable(host):
                 configure_printer(pid)
         time.sleep(30)
+
+
+def ppd_choices(pid):
+    """Parse `lpoptions -l` into {option: {valid choices}} (asterisk = default
+    is stripped). Used to drop option values a given printer doesn't support."""
+    r = run(["lpoptions", "-p", pid, "-l"])
+    choices = {}
+    for line in (r.stdout or "").splitlines():
+        if ":" not in line:
+            continue
+        head, vals = line.split(":", 1)
+        key = head.split("/", 1)[0].strip()
+        choices[key] = {v.lstrip("*") for v in vals.split()}
+    return choices
 
 
 def printer_status(pid):
@@ -180,10 +200,24 @@ def submit_print():
     if not pdf.startswith(b"%PDF"):
         return jsonify({"error": "payload is not a PDF"}), 400
 
-    media = body.get("media")  # e.g. "Custom.159x70mm" or "COM10"
+    media = body.get("media")  # e.g. "Custom.159x70mm" or "Env10"
     copies = int(body.get("copies", 1))
     title = body.get("title", "print-bridge job")
-    options = body.get("options") or {}
+    options = dict(body.get("options") or {})
+
+    # source="manual" → this printer's bypass/rear feed, where cheque stock
+    # and envelopes are hand-fed (otherwise the job pulls from the cassette).
+    if body.get("source") == "manual" and pid in MANUAL_SOURCE:
+        options.setdefault("InputSlot", MANUAL_SOURCE[pid])
+
+    # Drop any PPD option value this printer doesn't support, so a mapping
+    # meant for one printer can never fail the job on the other.
+    ppd = ppd_choices(pid)
+    for k in list(options):
+        if k in ppd and str(options[k]) not in ppd[k]:
+            app.logger.warning("dropping unsupported option %s=%s for %s",
+                               k, options[k], pid)
+            del options[k]
 
     cmd = ["lp", "-d", pid, "-n", str(copies), "-t", title]
     if media:
