@@ -35,10 +35,10 @@ loop and configured the moment it appears on the network.
 ## Deploy (Container Station)
 
 Paste `docker-compose.yml` into Applications → Create, replacing
-`REPLACE_WITH_SECRET` and `REPLACE_WITH_GITHUB_TOKEN` (fine-grained PAT,
-read-only Contents on this repo — it's private, the boot-time clone needs
-it). Then add a Cloudflare Tunnel public hostname
+`REPLACE_WITH_SECRET`. Then add a Cloudflare Tunnel public hostname
 `print.vandreus.com → http://<qnap-lan-ip>:8631` (same tunnel as
-scan.vandreus.com).
+scan.vandreus.com). The hostname is additionally gated by a Cloudflare
+Access Service Auth policy — the worker authenticates with a service token
+(CF-Access-Client-Id/Secret) on top of X-Print-Secret.
 
 To update: push to this repo, restart the container (it re-clones on boot).
