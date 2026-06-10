@@ -3,7 +3,9 @@
 # To ship an update later: push to GitHub, then restart the container.
 #
 # Replace REPLACE_WITH_SECRET with the shared secret (same value as the
-# PRINT_BRIDGE_SECRET wrangler secret on the molcom-expenses worker).
+# PRINT_BRIDGE_SECRET wrangler secret on the molcom-expenses worker), and
+# REPLACE_WITH_GITHUB_TOKEN with a fine-grained GitHub PAT that has read-only
+# Contents access to vandreus/print-bridge (the repo is private).
 services:
   print-bridge:
     image: python:3.11-slim
@@ -13,6 +15,7 @@ services:
       - "8631:8080"
     environment:
       PRINT_SECRET: "REPLACE_WITH_SECRET"
+      GIT_TOKEN: "REPLACE_WITH_GITHUB_TOKEN"
       CANON_URI: "ipp://10.69.7.107/ipp/print"
       EPSON_URI: "ipp://10.69.7.235:631/ipp/print"
     command: >
@@ -20,5 +23,5 @@ services:
       apt-get install -y --no-install-recommends cups cups-ipp-utils git ca-certificates &&
       pip install --no-cache-dir flask &&
       rm -rf /app &&
-      git clone --depth 1 https://github.com/vandreus/print-bridge /app &&
+      git clone --depth 1 https://$${GIT_TOKEN:+$${GIT_TOKEN}@}github.com/vandreus/print-bridge /app &&
       bash /app/start.sh"
