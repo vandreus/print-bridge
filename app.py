@@ -42,11 +42,18 @@ setup_state = {
     for pid in PRINTERS
 }
 
-# PPD name of each printer's manual/multipurpose feed, used when a job asks
-# for source="manual". Discovered via GET /printers/<id>/options:
+# PPD InputSlot name per printer for each logical feed a job can request.
+# Discovered via GET /printers/<id>/options:
 #   Canon MF450:   InputSlot: Auto ByPassTray *Tray1
 #   Epson XP-15000: InputSlot: Auto *Main Rear Disc
-MANUAL_SOURCE = {"canon": "ByPassTray", "epson": "Rear"}
+#   "manual"   = bypass/rear hand-feed (envelopes)
+#   "cassette" = front paper drawer (TD cheque stock loaded as a stack)
+# Unsupported values are dropped by ppd_choices(); the cassette names are each
+# printer's default tray, so a drop simply falls back to the same drawer.
+SOURCE_SLOT = {
+    "manual":   {"canon": "ByPassTray", "epson": "Rear"},
+    "cassette": {"canon": "Tray1",      "epson": "Main"},
+}
 
 
 def run(cmd, timeout=60):
@@ -205,10 +212,11 @@ def submit_print():
     title = body.get("title", "print-bridge job")
     options = dict(body.get("options") or {})
 
-    # source="manual" → this printer's bypass/rear feed, where cheque stock
-    # and envelopes are hand-fed (otherwise the job pulls from the cassette).
-    if body.get("source") == "manual" and pid in MANUAL_SOURCE:
-        options.setdefault("InputSlot", MANUAL_SOURCE[pid])
+    # Map the logical feed ("manual" bypass / "cassette" front drawer) to this
+    # printer's InputSlot. Envelopes are hand-fed; cheques stack in the drawer.
+    src = body.get("source")
+    if src in SOURCE_SLOT and pid in SOURCE_SLOT[src]:
+        options.setdefault("InputSlot", SOURCE_SLOT[src][pid])
 
     # Drop any PPD option value this printer doesn't support, so a mapping
     # meant for one printer can never fail the job on the other.
